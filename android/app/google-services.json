@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "541867932129",
+    "project_id": "face-authentication-app-44ddb",
+    "storage_bucket": "face-authentication-app-44ddb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:541867932129:android:ed73e3859b053c1555faa0",
+        "android_client_info": {
+          "package_name": "com.example.face_auth_compatible"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_cwJ2lBqsDMzWmGIlcBqyBb2BqP3I6aA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
