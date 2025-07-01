@@ -1,3 +1,5 @@
+require 'fileutils'
+
 # Minimum iOS deployment target
 platform :ios, '15.0'
 
@@ -34,134 +36,158 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
-def remove_g_flags_from_value(value)
-  if value.is_a?(String)
-    return value.gsub(/-G\S*/, '').gsub(/\s+/, ' ').strip
-  elsif value.is_a?(Array)
-    return value.reject { |flag| flag.to_s.include?('-G') }
-  else
-    return value
-  end
-end
-
 post_install do |installer|
-  puts "🔧 Starting ultra-aggressive -G flag removal..."
+  puts "🔧 Starting iOS compatibility fixes..."
   
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     
     target.build_configurations.each do |config|
+      # Basic iOS configuration
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
       
-      # SKIP resource bundle targets to avoid breaking them
+      # ✅ FIX: Remove problematic -G flags that cause ARM64 build issues
+      def clean_compiler_flags(flags)
+        return flags unless flags.is_a?(Array) || flags.is_a?(String)
+        
+        if flags.is_a?(Array)
+          # Remove any flags starting with -G
+          cleaned = flags.reject { |flag| flag.to_s.start_with?('-G') }
+          return cleaned
+        elsif flags.is_a?(String)
+          # Remove -G flags from string
+          cleaned = flags.gsub(/-G\S*/, '').strip
+          return cleaned.empty? ? nil : cleaned
+        end
+        
+        flags
+      end
+      
+      # Clean all compiler flag settings
+      ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'OTHER_SWIFT_FLAGS'].each do |flag_key|
+        if config.build_settings[flag_key]
+          config.build_settings[flag_key] = clean_compiler_flags(config.build_settings[flag_key])
+        end
+      end
+      
+      # ✅ FIX: Set safe debug information format for ARM64
+      config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
+      config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
+      
+      # Essential iOS frameworks - Fixed version with proper array handling
+      config.build_settings['OTHER_LDFLAGS'] ||= []
+      
+      # Ensure OTHER_LDFLAGS is always an array
+      if config.build_settings['OTHER_LDFLAGS'].is_a?(String)
+        config.build_settings['OTHER_LDFLAGS'] = [config.build_settings['OTHER_LDFLAGS']]
+      end
+      
+      # Add frameworks safely
+      ldflags_array = config.build_settings['OTHER_LDFLAGS']
+      ldflags_string = ldflags_array.is_a?(Array) ? ldflags_array.join(' ') : ldflags_array.to_s
+      
+      unless ldflags_string.include?('-framework CoreLocation')
+        config.build_settings['OTHER_LDFLAGS'] += ['-framework', 'CoreLocation']
+      end
+      
+      unless ldflags_string.include?('-framework Foundation')
+        config.build_settings['OTHER_LDFLAGS'] += ['-framework', 'Foundation']
+      end
+      
+      unless ldflags_string.include?('-ObjC')
+        config.build_settings['OTHER_LDFLAGS'] << '-ObjC'
+      end
+      
+      # Skip resource bundle targets
       next if target.name.include?('ResourceBundle') || target.name.include?('Bundle')
       
-      puts "Processing target: #{target.name}"
+      puts "✅ Configured target: #{target.name}"
       
-      # ULTRA AGGRESSIVE: Search through ALL build settings for ANY -G flags
-      config.build_settings.each do |key, value|
-        # Skip file path settings to avoid corruption
-        next if ['INFOPLIST_FILE', 'GCC_PREFIX_HEADER', 'MODULEMAP_FILE', 'PRODUCT_BUNDLE_IDENTIFIER', 'PRODUCT_NAME'].include?(key)
-        
-        original_value = value
-        cleaned_value = remove_g_flags_from_value(value)
-        
-        if original_value != cleaned_value
-          puts "  🚫 Removed -G flags from #{key}: #{original_value.inspect} -> #{cleaned_value.inspect}"
-          config.build_settings[key] = cleaned_value
-        end
-      end
-      
-      # Simulator-specific fixes
-      if config.name == 'Debug' && config.build_settings['SDKROOT'] == 'iphonesimulator'
-        puts "  🔧 Applying simulator-specific fixes for #{target.name}"
-        config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
-        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
-        config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
-        config.build_settings['COPY_PHASE_STRIP'] = 'NO'
-        config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
-      end
-      
-      # Problematic library specific fixes
-      if target.name.include?('gRPC') || target.name.include?('grpc') || target.name.include?('abseil') || target.name.include?('BoringSSL')
-        puts "  ⚡ Applying aggressive fixes for #{target.name}"
-        
-        # Completely override problematic flags
-        config.build_settings['OTHER_CFLAGS'] = '-w'
-        config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '-w'
+      # Firebase targets - simplified configuration
+      if target.name.match(/Firebase/i) || target.name.match(/firebase_/i)
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
         config.build_settings['WARNING_CFLAGS'] = '-w'
         config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
-        config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
-        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-        config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
-        config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
-        config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
-        config.build_settings['COPY_PHASE_STRIP'] = 'NO'
-        config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
         
-        # Remove any compiler-specific flags that might contain -G
-        ['GCC_PREPROCESSOR_DEFINITIONS', 'CLANG_CXX_LANGUAGE_STANDARD', 'CLANG_CXX_LIBRARY'].each do |key|
-          if config.build_settings[key]
-            config.build_settings[key] = remove_g_flags_from_value(config.build_settings[key])
-          end
-        end
+        # ✅ FIX: Clean Firebase-specific flags
+        config.build_settings['OTHER_CFLAGS'] = clean_compiler_flags(config.build_settings['OTHER_CFLAGS'])
       end
+      
+      # Protobuf targets - simplified configuration  
+      if target.name.match(/nanopb|protobuf|gRPC|grpc|BoringSSL/i)
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+        config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
+        config.build_settings['WARNING_CFLAGS'] = '-w'
+        
+        # ✅ FIX: Clean protobuf-specific flags
+        config.build_settings['OTHER_CFLAGS'] = clean_compiler_flags(config.build_settings['OTHER_CFLAGS'])
+        config.build_settings['OTHER_CPLUSPLUSFLAGS'] = clean_compiler_flags(config.build_settings['OTHER_CPLUSPLUSFLAGS'])
+      end
+      
+      # ✅ FIX: ARM64-specific optimizations
+      if config.name.downcase.include?('debug')
+        config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        config.build_settings['VALID_ARCHS'] = 'arm64'
+        config.build_settings['ARCHS'] = 'arm64'
+      end
+      
+      # General optimizations - safe for ARM64
+      config.build_settings['WARNING_CFLAGS'] = '-w'
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
     end
   end
 
-  # Process generated projects too
+  # Process generated projects
   installer.generated_projects.each do |project|
     project.targets.each do |target|
       target.build_configurations.each do |config|
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
-        config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        config.build_settings['ENABLE_BITCODE'] = 'NO'
         
-        next if target.name.include?('ResourceBundle') || target.name.include?('Bundle')
-        
-        # Ultra aggressive flag removal for generated projects
-        config.build_settings.each do |key, value|
-          next if ['INFOPLIST_FILE', 'GCC_PREFIX_HEADER', 'MODULEMAP_FILE', 'PRODUCT_BUNDLE_IDENTIFIER', 'PRODUCT_NAME'].include?(key)
-          
-          cleaned_value = remove_g_flags_from_value(value)
-          if value != cleaned_value
-            config.build_settings[key] = cleaned_value
+        # ✅ FIX: Clean generated project flags too
+        ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'OTHER_SWIFT_FLAGS'].each do |flag_key|
+          if config.build_settings[flag_key]
+            if config.build_settings[flag_key].is_a?(Array)
+              config.build_settings[flag_key] = config.build_settings[flag_key].reject { |flag| flag.to_s.start_with?('-G') }
+            elsif config.build_settings[flag_key].is_a?(String)
+              config.build_settings[flag_key] = config.build_settings[flag_key].gsub(/-G\S*/, '').strip
+            end
           end
+        end
+        
+        # Add frameworks to generated projects safely
+        config.build_settings['OTHER_LDFLAGS'] ||= []
+        
+        if config.build_settings['OTHER_LDFLAGS'].is_a?(String)
+          config.build_settings['OTHER_LDFLAGS'] = [config.build_settings['OTHER_LDFLAGS']]
+        end
+        
+        ldflags_array = config.build_settings['OTHER_LDFLAGS']
+        ldflags_string = ldflags_array.is_a?(Array) ? ldflags_array.join(' ') : ldflags_array.to_s
+        
+        unless ldflags_string.include?('-framework CoreLocation')
+          config.build_settings['OTHER_LDFLAGS'] += ['-framework', 'CoreLocation']
+        end
+        
+        unless ldflags_string.include?('-framework Foundation')
+          config.build_settings['OTHER_LDFLAGS'] += ['-framework', 'Foundation']
+        end
+        
+        unless ldflags_string.include?('-ObjC')
+          config.build_settings['OTHER_LDFLAGS'] << '-ObjC'
         end
       end
     end
   end
   
-  # AUTO-CREATE SYMLINKS AFTER POD INSTALL
-  puts "🔧 Creating necessary symlinks..."
-  
-  # BoringSSL Info.plist file
-  boring_ssl_target = "Pods/Target Support Files/BoringSSL"
-  boring_ssl_source = "Pods/Target Support Files/BoringSSL-GRPC/BoringSSL-GRPC-Info.plist"
-  unless File.exist?(boring_ssl_target)
-    if File.exist?(boring_ssl_source)
-      puts "✅ Creating BoringSSL Info.plist file"
-      FileUtils.cp(boring_ssl_source, boring_ssl_target)
-    end
-  end
-  
-  # MLKitFaceDetection ResourceBundle symlink
-  mlkit_resource_target = "Pods/Target Support Files/MLKitFaceDetection/ResourceBundle"
-  unless File.exist?(mlkit_resource_target) || File.symlink?(mlkit_resource_target)
-    puts "✅ Creating MLKitFaceDetection ResourceBundle symlink"
-    File.symlink("ResourceBundle-GoogleMVFaceDetectorResources-MLKitFaceDetection-Info.plist", mlkit_resource_target)
-  end
-  
-  # GoogleMaps ResourceBundle symlink
-  maps_resource_target = "Pods/Target Support Files/GoogleMaps/ResourceBundle"
-  unless File.exist?(maps_resource_target) || File.symlink?(maps_resource_target)
-    puts "✅ Creating GoogleMaps ResourceBundle symlink"
-    File.symlink("ResourceBundle-GoogleMapsResources-GoogleMaps-Info.plist", maps_resource_target)
-  end
-  
-  puts "🎉 Ultra-aggressive flag removal complete!"
+  puts "🎉 iOS fixes complete - ARM64 compatible!"
+  puts "✅ Deployment target: iOS 15.0"
+  puts "✅ Problematic -G flags: Removed"
+  puts "✅ ARM64 optimizations: Applied"
+  puts "✅ Essential frameworks: CoreLocation, Foundation"
+  puts "✅ Firebase and protobuf: Configured"
 end
