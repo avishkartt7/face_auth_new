@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Face Auth New</string>
+	<string>PHOENICIAN</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>face_auth_new</string>
+	<string>face_auth_compatible</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -45,5 +45,92 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- ✅ CRITICAL: Camera permissions for face detection -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access for face authentication and security verification</string>
+	
+	<!-- ✅ CRITICAL: Photo library permissions -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs photo library access to save and select profile images</string>
+	
+	<!-- ✅ CRITICAL: Photo library add permissions (iOS 11+) -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app needs permission to save photos to your photo library</string>
+	
+	<!-- ✅ CRITICAL: Location permissions for geofencing -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs location access to verify your presence at authorized work locations</string>
+	
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs location access to verify your presence at authorized work locations</string>
+	
+	<!-- ✅ Face ID permissions -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>This app uses biometric authentication for secure access</string>
+	
+	<!-- ✅ Microphone permissions (for video recording if needed) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app may need microphone access for video recording features</string>
+	
+	<!-- ✅ File access permissions -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>This app needs access to documents for importing and exporting data</string>
+	
+	<!-- ✅ Push notification configuration -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>background-fetch</string>
+		<string>background-processing</string>
+	</array>
+	
+	<!-- ✅ Network permissions with Firebase domains -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>firebaseapp.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>googleapis.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>firebasestorage.app</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	
+	<!-- ✅ Firebase configuration -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
+	
+	<!-- ✅ Bluetooth permissions (if needed) -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This app may use Bluetooth for device connectivity features</string>
+	
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This app may use Bluetooth for device connectivity features</string>
 </dict>
 </plist>
